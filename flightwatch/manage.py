@@ -14,6 +14,12 @@ from fli.models import Airport
 
 from .db import D1
 
+# Starter routes for new people (keep in sync with web/src/index.js)
+DEFAULT_ROUTES = [
+    *[(d, 5, 10) for d in ["LHR", "CDG", "FCO", "AMS", "BCN", "MAD", "FRA", "DUB"]],
+    *[(d, 7, 14) for d in ["HND", "ICN", "HKG", "SIN", "BKK", "TPE"]],
+]
+
 
 def main():
     p = argparse.ArgumentParser()
@@ -23,6 +29,7 @@ def main():
     u.add_argument("name")
     u.add_argument("email")
     u.add_argument("--basecamp", action="store_true", help="ping Basecamp instead of email")
+    u.add_argument("--starter", metavar="ORIGIN", help="also add the starter routes from this airport, e.g. ATL")
 
     lk = sub.add_parser("link", help="print someone's settings page link")
     lk.add_argument("email")
@@ -51,6 +58,16 @@ def main():
             [a.name, a.email.lower(), token, 1 if a.basecamp else 0],
         )
         print(f"Added {a.name}. Settings link: {_link(token)}")
+        if a.starter:
+            uid = db.query("SELECT id FROM users WHERE email=?", [a.email.lower()])[0]["id"]
+            origin = a.starter.upper()
+            for dest, lo, hi in DEFAULT_ROUTES:
+                if dest != origin:
+                    db.execute(
+                        "INSERT INTO watches (user_id, origin, destination, min_nights, max_nights) VALUES (?, ?, ?, ?, ?)",
+                        [uid, origin, dest, lo, hi],
+                    )
+            print(f"Added {len(DEFAULT_ROUTES)} starter routes from {origin}")
     elif a.cmd == "link":
         rows = db.query("SELECT token FROM users WHERE email=?", [a.email.lower()])
         if not rows:

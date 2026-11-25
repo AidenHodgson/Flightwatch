@@ -16,7 +16,6 @@ jobs:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           workingDirectory: web
-          secrets: |
-            ADMIN_KEY
-        env:
-          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+# ADMIN_KEY lives on the Worker itself and survives deploys. Set it once with:
+#   cd web && npx wrangler secret put ADMIN_KEY
+# or in Cloudflare: Workers & Pages > flightwatch > Settings > Variables and Secrets

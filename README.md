@@ -49,7 +49,6 @@ In your repo, go to **Settings > Secrets and variables > Actions** and add:
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Gmail or other SMTP settings, **or** |
 | `RESEND_API_KEY` | If using Resend instead |
 | `FROM_EMAIL` | The address alerts come from (optional with Gmail) |
-| `ADMIN_KEY` | A long random password for your admin page. Make one with `python -c "import secrets; print(secrets.token_urlsafe(24))"` |
 | `BASECAMP_URL`, `BASECAMP_POST_TOKEN` | Optional. Sends alerts for users marked "Basecamp" to a [Basecamp](#basecamp-pings-optional) app instead of email |
 
 Also add a repo **variable** (same page, Variables tab) named `SITE_URL` once the settings page is live (step 5), like `https://flightwatch.yourname.workers.dev`. It's used for the links in emails.
@@ -60,13 +59,15 @@ Optional: add a repo **variable** `SAMPLE_EVERY_DAYS` (default `10`). Lower mean
 
 Go to **Actions > Deploy settings page > Run workflow**. It deploys the page to Cloudflare Workers, a free hosting service, and the run log shows its address (something like `https://flightwatch.yourname.workers.dev`). Save that as the `SITE_URL` variable from step 4.
 
+Then give the admin page a password. Make a long random one (`python -c "import secrets; print(secrets.token_urlsafe(24))"`) and add it in Cloudflare under **Workers & Pages > flightwatch > Settings > Variables and Secrets** as a secret named `ADMIN_KEY` (or run `cd web && npx wrangler secret put ADMIN_KEY`). It stays set across deploys.
+
 It redeploys on its own whenever anything in `web/` changes.
 
 ### 6. Add people
 
 Open `https://<your SITE_URL>/admin/<your ADMIN_KEY>`. Bookmark it, since it's your admin page. From there you can:
 
-- Add someone by name and email
+- Add someone by name, email and home airport. They start with 14 starter routes (8 in Europe for 5 to 10 nights, 6 in Asia for 7 to 14 nights) unless you untick the box
 - Copy their private settings link, or tap "Email it to them"
 - Make a new link if someone's gets shared around (the old one stops working)
 

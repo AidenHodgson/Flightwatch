@@ -24,6 +24,22 @@ const AIRPORTS = [
 ];
 const AIRPORT_NAME = Object.fromEntries(AIRPORTS);
 
+// Starter routes every new person gets (they can remove any of them).
+// Keep in sync with DEFAULT_ROUTES in flightwatch/manage.py.
+const DEFAULT_ORIGIN = "ATL";
+const DEFAULT_ROUTES = [
+  // Europe: shorter trips
+  ...["LHR", "CDG", "FCO", "AMS", "BCN", "MAD", "FRA", "DUB"].map((d) => [d, 5, 10]),
+  // Asia: longer trips
+  ...["HND", "ICN", "HKG", "SIN", "BKK", "TPE"].map((d) => [d, 7, 14]),
+];
+
+function starterInserts(env, userId, origin = DEFAULT_ORIGIN) {
+  return DEFAULT_ROUTES.filter(([d]) => d !== origin).map(([d, lo, hi]) =>
+    env.DB.prepare("INSERT INTO watches (user_id, origin, destination, min_nights, max_nights) VALUES (?, ?, ?, ?, ?)")
+      .bind(userId, origin, d, lo, hi));
+}
+
 export default {
   async fetch(request, env) {
     try {
@@ -65,13 +81,17 @@ async function route(request, env) {
       const email = (form.get("email") || "").toString().trim().toLowerCase();
       if (!name || !email.includes("@")) return redirect(`${base}?m=${encodeURIComponent("Need a name and email")}`);
       const token = randomToken();
+      let userId;
       try {
-        await env.DB.prepare("INSERT INTO users (name, email, token, basecamp) VALUES (?, ?, ?, ?)")
+        const r = await env.DB.prepare("INSERT INTO users (name, email, token, basecamp) VALUES (?, ?, ?, ?)")
           .bind(name, email, token, form.get("basecamp") ? 1 : 0).run();
+        userId = r.meta.last_row_id;
       } catch {
         return redirect(`${base}?m=${encodeURIComponent("That email is already added")}`);
       }
-      return redirect(`${base}?m=${encodeURIComponent(`Added ${name}`)}`);
+      const origin = code(form.get("origin")) || DEFAULT_ORIGIN;
+      if (form.get("starter")) await env.DB.batch(starterInserts(env, userId, origin));
+      return redirect(`${base}?m=${encodeURIComponent(`Added ${name}${form.get("starter") ? " with the starter routes" : ""}`)}`);
     }
     if (method === "POST" && parts[2] === "link" && parts[3]) {
       await env.DB.prepare("UPDATE users SET token = ? WHERE id = ?").bind(randomToken(), parts[3]).run();
@@ -107,7 +127,8 @@ async function userPage(env, user, base, msg) {
     </section>
 
     <h2>Your routes</h2>
-    ${rows || `<p class="muted">No routes yet. Add one below.</p>`}
+    ${rows || `<div class="card"><p class="muted">No routes yet. Add your own below, or start with ${DEFAULT_ROUTES.length} popular ones in Europe and Asia.</p>
+      <form method="post" action="${base}/starter" class="row"><input name="origin" list="airports" value="${DEFAULT_ORIGIN}" maxlength="3" class="code" aria-label="Home airport"><button>Add starter routes</button></form></div>`}
 
     <h2>Add routes</h2>
     <form method="post" action="${base}/add" class="card stack">
@@ -178,6 +199,13 @@ async function userAction(env, user, action, form) {
     await env.DB.prepare("UPDATE users SET active = ? WHERE id = ?").bind(user.active ? 0 : 1, user.id).run();
     return user.active ? "Alerts paused" : "Alerts are back on";
   }
+  if (action === "starter") {
+    const { n } = await env.DB.prepare("SELECT COUNT(*) AS n FROM watches WHERE user_id = ?").bind(user.id).first();
+    if (n > 0) return "Starter routes are only for an empty list";
+    const origin = code(form.get("origin")) || DEFAULT_ORIGIN;
+    await env.DB.batch(starterInserts(env, user.id, origin));
+    return `Added ${DEFAULT_ROUTES.length} starter routes from ${origin}`;
+  }
   if (action === "add") {
     const origin = code(form.get("origin"));
     const dests = (form.get("destinations") || "").toString().split(/[\s,]+/).map(code).filter(Boolean);
@@ -244,9 +272,12 @@ async function adminPage(env, url, base, msg) {
     <form method="post" action="${base}/user" class="card stack">
       <label>Name <input name="name" required></label>
       <label>Email <input name="email" type="email" required></label>
+      <label>Home airport <input name="origin" list="airports" value="${DEFAULT_ORIGIN}" maxlength="3" class="code"></label>
+      <label class="row nogap"><input type="checkbox" name="starter" checked style="width:auto"> Start with the ${DEFAULT_ROUTES.length} starter routes (Europe and Asia)</label>
       <label class="row nogap"><input type="checkbox" name="basecamp" style="width:auto"> Send their alerts to Basecamp instead of email</label>
       <button>Add</button>
     </form>
+    <datalist id="airports">${AIRPORTS.map(([c, n]) => `<option value="${c}">${n}</option>`).join("")}</datalist>
     <h2>People</h2>
     ${rows || `<p class="muted">Nobody yet.</p>`}`;
   return page("Flightwatch admin", body);
