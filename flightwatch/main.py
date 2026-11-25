@@ -112,7 +112,8 @@ def run(report=False):
                     [w["id"], dep, ret, price],
                 )
 
-    site = os.environ.get("SITE_URL", "").rstrip("/")
+    site = os.environ.get("SITE_URL", "").strip().rstrip("/")
+    failed = []
     for email, info in per_user.items():
         manage_url = f"{site}/u/{info['token']}" if site and info.get("token") else None
         if info.get("basecamp") and notify.enabled():
@@ -125,11 +126,17 @@ def run(report=False):
         subject, html, text = mailer.render(info["name"], info["deals"], manage_url)
         if report:
             subject = subject.replace("deals", "fares").replace("deal ", "fare ") + " (test report)"
-        mailer.send(email, subject, html, text)
-        log.info("emailed %s (%d)", email, len(info["deals"]))
+        try:
+            mailer.send(email, subject, html, text)
+            log.info("emailed %s (%d)", email, len(info["deals"]))
+        except Exception as e:  # one bad email shouldn't stop the others
+            failed.append(email)
+            log.error("could not email %s: %r", email, e)
 
     # Keep the database small: old prices aren't used for "normal" anymore
     db.execute("DELETE FROM prices WHERE checked_at < datetime('now', '-120 days')")
+    if failed:
+        raise SystemExit(f"Prices saved, but email failed for: {', '.join(failed)}")
 
 
 if __name__ == "__main__":

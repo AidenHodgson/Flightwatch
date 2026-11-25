@@ -30,11 +30,23 @@ def _smtp(to, subject, html, text):
     msg["Subject"], msg["From"], msg["To"] = subject, _sender(), to
     msg.attach(MIMEText(text, "plain"))
     msg.attach(MIMEText(html, "html"))
+    host, user, pw = _env("SMTP_HOST"), _env("SMTP_USER"), _env("SMTP_PASSWORD")
     port = int(_env("SMTP_PORT", "587") or "587")
-    with smtplib.SMTP(_env("SMTP_HOST"), port) as s:
-        s.starttls()
-        s.login(_env("SMTP_USER"), _env("SMTP_PASSWORD"))
-        s.send_message(msg)
+    try:
+        with smtplib.SMTP(host, port, timeout=30) as s:
+            s.ehlo()
+            s.starttls()
+            s.ehlo()
+            s.login(user, pw)
+            s.send_message(msg)
+    except smtplib.SMTPAuthenticationError:
+        raise
+    except (smtplib.SMTPServerDisconnected, OSError) as e:
+        # Gmail sometimes drops port 587 from cloud servers; try SSL on 465
+        print(f"SMTP on {port} failed ({e}), trying SSL on 465")
+        with smtplib.SMTP_SSL(host, 465, timeout=30) as s:
+            s.login(user, pw)
+            s.send_message(msg)
 
 
 def _resend(to, subject, html, text):
