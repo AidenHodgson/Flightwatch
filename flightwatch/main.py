@@ -11,7 +11,7 @@ import logging
 import os
 from datetime import timedelta
 
-from . import deals, mailer
+from . import deals, mailer, notify
 from .db import D1
 from .search import PriceChecker, booking_link, sample_departures
 
@@ -21,7 +21,8 @@ HISTORY_DAYS = 60
 
 def load_watches(db):
     return db.query(
-        """SELECT w.*, u.name AS user_name, u.email AS user_email
+        """SELECT w.*, u.name AS user_name, u.email AS user_email,
+                  u.token AS user_token, u.basecamp AS user_basecamp
            FROM watches w JOIN users u ON u.id = w.user_id
            WHERE w.active = 1 AND u.active = 1"""
     )
@@ -96,7 +97,10 @@ def run(report=False):
             if pick is None:
                 continue
             price, dep, ret = pick
-            entry = per_user.setdefault(w["user_email"], {"name": w["user_name"], "deals": []})
+            entry = per_user.setdefault(w["user_email"], {
+                "name": w["user_name"], "deals": [],
+                "token": w.get("user_token"), "basecamp": w.get("user_basecamp"),
+            })
             entry["deals"].append({
                 "origin": origin, "destination": dest, "price": price,
                 "normal": int(normal) if normal else None,
@@ -108,12 +112,24 @@ def run(report=False):
                     [w["id"], dep, ret, price],
                 )
 
+    site = os.environ.get("SITE_URL", "").rstrip("/")
     for email, info in per_user.items():
-        subject, html, text = mailer.render(info["name"], info["deals"])
+        manage_url = f"{site}/u/{info['token']}" if site and info.get("token") else None
+        if info.get("basecamp") and notify.enabled():
+            try:
+                notify.post_basecamp(info["deals"], manage_url)
+                log.info("posted %d to Basecamp for %s", len(info["deals"]), info["name"])
+                continue
+            except Exception as e:  # fall back to email
+                log.warning("Basecamp post failed, emailing instead: %s", e)
+        subject, html, text = mailer.render(info["name"], info["deals"], manage_url)
         if report:
             subject = subject.replace("deals", "fares").replace("deal ", "fare ") + " (test report)"
         mailer.send(email, subject, html, text)
         log.info("emailed %s (%d)", email, len(info["deals"]))
+
+    # Keep the database small: old prices aren't used for "normal" anymore
+    db.execute("DELETE FROM prices WHERE checked_at < datetime('now', '-120 days')")
 
 
 if __name__ == "__main__":

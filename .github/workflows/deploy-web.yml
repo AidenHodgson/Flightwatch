@@ -1,0 +1,22 @@
+name: Deploy settings page
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          workingDirectory: web
+          secrets: |
+            ADMIN_KEY
+        env:
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}

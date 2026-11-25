@@ -1,0 +1,8 @@
+name = "flightwatch"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "flight-watch"
+database_id = "7fd78c7f-f1f6-4cf9-b942-0403e3873dc8"

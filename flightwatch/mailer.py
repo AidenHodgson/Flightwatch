@@ -41,7 +41,7 @@ def _resend(to, subject, html, text):
     r.raise_for_status()
 
 
-def render(name, deals):
+def render(name, deals, manage_url=None):
     """deals: list of dicts with route, dates, price, normal, link."""
     lines, rows = [], []
     for d in deals:
@@ -57,13 +57,20 @@ def render(name, deals):
         )
     count = len(deals)
     subject = f"Flightwatch: {count} flight deal{'s' if count != 1 else ''} for you"
+    manage_text = f"\n\nChange your routes or pause alerts: {manage_url}" if manage_url else ""
+    manage_html = (
+        f"<p><a href='{manage_url}' style='display:inline-block;padding:10px 16px;background:#111;"
+        f"color:#fff;border-radius:8px;text-decoration:none'>Manage your routes</a></p>"
+        if manage_url else ""
+    )
     text = f"Hi {name},\n\nNew deals on routes you're watching:\n\n" + "\n\n".join(lines) + (
         "\n\nPrices change fast, so check before booking. Book directly with the airline if you can."
-    )
+    ) + manage_text
     html = (
         f"<p>Hi {name},</p><p>New deals on routes you're watching:</p>"
         f"<table>{''.join(rows)}</table>"
         "<p style='color:#666'>Prices change fast, so check before booking. "
         "Book directly with the airline if you can.</p>"
+        + manage_html
     )
     return subject, html, text

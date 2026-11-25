@@ -3,6 +3,7 @@ from statistics import median
 
 MIN_HISTORY = 15          # price samples needed before we trust "normal"
 REALERT_DAYS = 7          # wait this long before re-sending a similar deal
+# (runs happen every few hours, so this also stops the same deal pinging you all day)
 REALERT_BETTER_PCT = 10   # unless the new price is this much lower
 
 

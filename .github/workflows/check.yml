@@ -2,13 +2,17 @@ name: Check flights
 
 on:
   schedule:
-    - cron: "17 11 * * *"   # every day around 6:17 AM Eastern
+    - cron: "17 */3 * * *"   # every 3 hours (GitHub may start it a few minutes late)
   workflow_dispatch:
     inputs:
       report:
         description: "Email everyone their cheapest fares (test run)"
         type: boolean
         default: false
+
+concurrency:
+  group: check-flights
+  cancel-in-progress: false
 
 jobs:
   check:
@@ -32,5 +36,8 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          SITE_URL: ${{ vars.SITE_URL }}
+          BASECAMP_URL: ${{ secrets.BASECAMP_URL }}
+          BASECAMP_POST_TOKEN: ${{ secrets.BASECAMP_POST_TOKEN }}
           SAMPLE_EVERY_DAYS: ${{ vars.SAMPLE_EVERY_DAYS || '10' }}
         run: python -m flightwatch.main ${{ inputs.report && '--report' || '' }}

@@ -4,8 +4,11 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
   active INTEGER NOT NULL DEFAULT 1,
+  token TEXT,                      -- secret for their settings page link
+  basecamp INTEGER NOT NULL DEFAULT 0, -- 1 = also ping a Basecamp app (optional)
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token);
 
 -- One row per route a person wants to watch
 CREATE TABLE IF NOT EXISTS watches (

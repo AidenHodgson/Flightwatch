@@ -35,6 +35,9 @@ class PriceChecker:
 
     def cheapest_round_trip(self, origin, destination, cabin, depart, nights):
         """Cheapest round-trip price in USD for one departure date, or None."""
+        if origin not in Airport.__members__ or destination not in Airport.__members__:
+            log.warning("unknown airport code in %s-%s, skipping", origin, destination)
+            return None
         segments, trip_type = build_date_search_segments(
             origin=Airport[origin],
             destination=Airport[destination],

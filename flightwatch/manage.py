@@ -1,11 +1,14 @@
 """Add and list people and routes without touching SQL.
 
   python -m flightwatch.manage add-user "Dad" dad@example.com
+  python -m flightwatch.manage link dad@example.com
   python -m flightwatch.manage add-watch dad@example.com ATL FCO --nights 5-10 --months 6
   python -m flightwatch.manage list
   python -m flightwatch.manage pause-watch 3
 """
 import argparse
+import os
+import secrets
 
 from fli.models import Airport
 
@@ -19,6 +22,10 @@ def main():
     u = sub.add_parser("add-user")
     u.add_argument("name")
     u.add_argument("email")
+    u.add_argument("--basecamp", action="store_true", help="ping Basecamp instead of email")
+
+    lk = sub.add_parser("link", help="print someone's settings page link")
+    lk.add_argument("email")
 
     w = sub.add_parser("add-watch")
     w.add_argument("email")
@@ -38,8 +45,21 @@ def main():
     db = D1()
 
     if a.cmd == "add-user":
-        db.execute("INSERT INTO users (name, email) VALUES (?, ?)", [a.name, a.email.lower()])
-        print(f"Added {a.name}")
+        token = secrets.token_urlsafe(18)
+        db.execute(
+            "INSERT INTO users (name, email, token, basecamp) VALUES (?, ?, ?, ?)",
+            [a.name, a.email.lower(), token, 1 if a.basecamp else 0],
+        )
+        print(f"Added {a.name}. Settings link: {_link(token)}")
+    elif a.cmd == "link":
+        rows = db.query("SELECT token FROM users WHERE email=?", [a.email.lower()])
+        if not rows:
+            raise SystemExit(f"No user with email {a.email}")
+        token = rows[0]["token"]
+        if not token:
+            token = secrets.token_urlsafe(18)
+            db.execute("UPDATE users SET token=? WHERE email=?", [token, a.email.lower()])
+        print(_link(token))
     elif a.cmd == "add-watch":
         rows = db.query("SELECT id FROM users WHERE email=?", [a.email.lower()])
         if not rows:
@@ -68,6 +88,11 @@ def main():
     elif a.cmd == "pause-watch":
         db.execute("UPDATE watches SET active=0 WHERE id=?", [a.watch_id])
         print(f"Paused #{a.watch_id}")
+
+
+def _link(token):
+    site = os.environ.get("SITE_URL", "").rstrip("/")
+    return f"{site}/u/{token}" if site else f"/u/{token} (set SITE_URL for the full link)"
 
 
 if __name__ == "__main__":

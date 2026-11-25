@@ -51,3 +51,21 @@ def test_run_sends_deal_once(monkeypatch):
 
     main.run(report=True)
     assert len(sent) == 2 and "test report" in sent[1][1]
+
+
+def test_basecamp_user_and_manage_link(monkeypatch):
+    db = FakeD1()
+    db.execute("INSERT INTO users (name, email, token, basecamp) VALUES ('Aiden', 'a@x.com', 'tok123', 1)")
+    db.execute("INSERT INTO users (name, email, token) VALUES ('Dad', 'dad@x.com', 'dadtok')")
+    db.execute("INSERT INTO watches (user_id, origin, destination, max_price) VALUES (1, 'ATL', 'LHR', 700)")
+    db.execute("INSERT INTO watches (user_id, origin, destination, max_price) VALUES (2, 'ATL', 'LHR', 700)")
+    posted, sent = [], []
+    monkeypatch.setenv("SITE_URL", "https://fw.example.com")
+    monkeypatch.setattr(main, "D1", lambda: db)
+    monkeypatch.setattr(main, "PriceChecker", lambda: FakeChecker(650))
+    monkeypatch.setattr(main.notify, "enabled", lambda: True)
+    monkeypatch.setattr(main.notify, "post_basecamp", lambda d, url: posted.append((d, url)))
+    monkeypatch.setattr(main.mailer, "send", lambda *a: sent.append(a))
+    main.run()
+    assert len(posted) == 1 and posted[0][1] == "https://fw.example.com/u/tok123"
+    assert len(sent) == 1 and sent[0][0] == "dad@x.com" and "/u/dadtok" in sent[0][3]
