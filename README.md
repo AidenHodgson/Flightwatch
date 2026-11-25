@@ -139,6 +139,7 @@ Turn off the GitHub schedule (delete the `schedule:` lines in `.github/workflows
 ```bash
 python -m flightwatch.main            # normal run
 python -m flightwatch.main --test     # also sends everyone a short setup email
+python -m flightwatch.main --dry-run  # check prices, print what would send, save nothing
 ```
 
 Without email settings, emails are printed to the screen instead of sent.

@@ -102,8 +102,25 @@ def evaluate_watch(w, results, normal):
     }
 
 
-def run(test=False):
-    db = D1()
+class DryRunDB:
+    """Reads from the real database, skips every write."""
+    def __init__(self, db):
+        self.db = db
+
+    def query(self, sql, params=None):
+        if sql.lstrip().upper().startswith("SELECT"):
+            return self.db.query(sql, params)
+        return []
+
+    def execute(self, sql, params=None):
+        self.query(sql, params)
+
+
+def run(test=False, dry_run=False):
+    db = DryRunDB(D1()) if dry_run else D1()
+    if dry_run:
+        mailer.send = lambda to, subject, html, text: print(f"\n[dry run] would email {to}: {subject}\n{text}\n")
+        github_alert.report_failure = github_alert.clear_failure = lambda *a, **k: None
     checker = PriceChecker()
     every = int(os.environ.get("SAMPLE_EVERY_DAYS", "10"))
     watches = load_watches(db)
@@ -247,4 +264,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--test", "--report", dest="test", action="store_true",
                    help="also send everyone a short setup email (no fares)")
-    run(test=p.parse_args().test)
+    p.add_argument("--dry-run", action="store_true",
+                   help="check prices and print what would be sent, without saving or emailing")
+    a = p.parse_args()
+    run(test=a.test, dry_run=a.dry_run)
