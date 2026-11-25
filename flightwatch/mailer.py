@@ -4,6 +4,7 @@ import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr, parseaddr
 
 import httpx
 
@@ -27,7 +28,13 @@ def send(to, subject, html, text):
 
 
 def _sender():
-    return _env("FROM_EMAIL") or _env("SMTP_USER")
+    """From header. Gmail only lets you send as the account you log in with, so
+    keep FROM_EMAIL's display name but use the SMTP_USER address when they differ."""
+    name, addr = parseaddr(_env("FROM_EMAIL"))
+    user = _env("SMTP_USER")
+    if _env("SMTP_HOST") and user and addr.lower() != user.lower():
+        addr = user
+    return formataddr((name or "Flightwatch", addr or user))
 
 
 class EmailLoginError(Exception):

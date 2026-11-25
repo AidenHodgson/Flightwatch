@@ -63,3 +63,9 @@ def test_empty_password(smtp, monkeypatch):
     monkeypatch.setenv("SMTP_PASSWORD", "  ")
     with pytest.raises(mailer.EmailLoginError, match="empty"):
         mailer.send("to@example.com", "s", "<p>h</p>", "t")
+
+
+
+def test_from_uses_login_account_with_flightwatch_name(smtp, monkeypatch):
+    monkeypatch.setenv("FROM_EMAIL", "Flightwatch <other@example.com>")
+    assert mailer._sender() == "Flightwatch <sender@example.com>"
