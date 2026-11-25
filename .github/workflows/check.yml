@@ -14,6 +14,10 @@ concurrency:
   group: check-flights
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  issues: write   # backup alert: opens an issue if email stops working
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -36,6 +40,7 @@ jobs:
           SITE_URL: ${{ vars.SITE_URL || 'https://flightwatch.aidentjhodgson.workers.dev' }}
           BASECAMP_URL: ${{ secrets.BASECAMP_URL || 'https://basecamp.aidentjhodgson.workers.dev' }}
           SAMPLE_EVERY_DAYS: ${{ vars.SAMPLE_EVERY_DAYS || '10' }}
+          GITHUB_TOKEN: ${{ github.token }}
           # Real secrets: add these under Settings > Secrets and variables > Actions
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}

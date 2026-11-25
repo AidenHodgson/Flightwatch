@@ -10,7 +10,7 @@ import logging
 import os
 from datetime import timedelta
 
-from . import deals, mailer, notify
+from . import deals, github_alert, mailer, notify
 from .db import D1
 from .search import PriceChecker, booking_link, sample_departures
 
@@ -117,7 +117,7 @@ def run(test=False):
             entry["sent"].append((w["id"], dep, ret, price))
 
     site = os.environ.get("SITE_URL", "").strip().rstrip("/")
-    failed = []
+    failed, pending, errors = [], [], []
     def record(info):
         # Only remember a deal as sent once it actually went out,
         # so a failed email gets retried on the next run
@@ -127,7 +127,12 @@ def run(test=False):
                 [watch_id, dep, ret, price],
             )
 
+    login_broken = False
     for email, info in per_user.items():
+        if login_broken:
+            failed.append(email)
+            pending.append((info["name"], info["deals"]))
+            continue
         manage_url = f"{site}/u/{info['token']}" if site and info.get("token") else None
         if info.get("basecamp") and notify.enabled():
             try:
@@ -144,15 +149,33 @@ def run(test=False):
             log.info("emailed %s (%d)", email, len(info["deals"]))
         except Exception as e:  # one bad email shouldn't stop the others
             failed.append(email)
-            log.error("could not email %s: %r", email, e)
+            pending.append((info["name"], info["deals"]))
+            errors.append(str(e))
+            log.error("could not email %s: %s", email, e)
+            if isinstance(e, mailer.EmailLoginError):
+                # Same login for everyone: stop trying, keep the rest of the deals waiting
+                login_broken = True
 
-    if test:
-        failed += send_setup_emails(watches, site)
+    if test and not login_broken:
+        f2, e2 = send_setup_emails(watches, site)
+        failed += f2
+        errors += e2
+
+    # Backup channel: a GitHub issue that says what broke and holds the waiting deals
+    try:
+        if errors:
+            github_alert.report_failure(errors[0], pending)
+        elif per_user or test:
+            github_alert.clear_failure()
+    except Exception as e:
+        log.warning("could not update the GitHub issue: %s", e)
 
     # Keep the database small: old prices aren't used for "normal" anymore
     db.execute("DELETE FROM prices WHERE checked_at < datetime('now', '-120 days')")
     if failed:
-        raise SystemExit(f"Prices saved, but email failed for: {', '.join(failed)}")
+        # Prices are saved and unsent deals retry next run. Exit non-zero so the
+        # run shows red in GitHub, with the reason as the last line of the log.
+        raise SystemExit(f"Prices saved. Email failed for {len(failed)} person(s): {errors[0]}")
 
 
 def send_setup_emails(watches, site):
@@ -160,7 +183,7 @@ def send_setup_emails(watches, site):
     people = {}
     for w in watches:
         people.setdefault(w["user_email"], {"name": w["user_name"], "token": w.get("user_token"), "n": 0})["n"] += 1
-    failed = []
+    failed, errors = [], []
     for email, p in people.items():
         manage_url = f"{site}/u/{p['token']}" if site and p.get("token") else None
         subject, html, text = mailer.render_setup(p["name"], p["n"], manage_url)
@@ -169,8 +192,11 @@ def send_setup_emails(watches, site):
             log.info("sent setup email to %s", email)
         except Exception as e:
             failed.append(email)
-            log.error("could not email %s: %r", email, e)
-    return failed
+            errors.append(str(e))
+            log.error("could not email %s: %s", email, e)
+            if isinstance(e, mailer.EmailLoginError):
+                break
+    return failed, errors
 
 
 if __name__ == "__main__":

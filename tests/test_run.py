@@ -124,3 +124,28 @@ def test_failed_email_is_retried_next_run(monkeypatch):
     monkeypatch.setattr(main.mailer, "send", lambda *a: sent.append(a))
     main.run()
     assert len(sent) == 1
+
+
+
+def test_login_error_opens_backup_issue_and_keeps_deals(monkeypatch):
+    db = FakeD1()
+    db.execute("INSERT INTO users (name, email) VALUES ('Dad', 'dad@x.com')")
+    db.execute("INSERT INTO users (name, email) VALUES ('Mom', 'mom@x.com')")
+    db.execute("INSERT INTO watches (user_id, origin, destination) VALUES (1, 'ATL', 'FRA')")
+    db.execute("INSERT INTO watches (user_id, origin, destination) VALUES (2, 'ATL', 'FRA')")
+    calls, reported = [], []
+    monkeypatch.setattr(main, "D1", lambda: db)
+    monkeypatch.setattr(main, "PriceChecker", lambda: FakeChecker(520, 768, 580))
+
+    def bad_login(*a):
+        calls.append(a)
+        raise main.mailer.EmailLoginError("rejected the login")
+    monkeypatch.setattr(main.mailer, "send", bad_login)
+    monkeypatch.setattr(main.github_alert, "report_failure", lambda err, pending: reported.append(pending))
+    try:
+        main.run(test=True)
+    except SystemExit as e:
+        assert "Prices saved" in str(e)
+    assert len(calls) == 1                       # stopped after the first bad login
+    assert [n for n, _ in reported[0]] == ["Dad", "Mom"]  # both kept waiting
+    assert db.query("SELECT COUNT(*) n FROM alerts")[0]["n"] == 0

@@ -99,6 +99,12 @@ Go to **Actions > Check flights > Run workflow** and tick **Also send everyone a
 
 Sale alerts can start from the first run, since Google supplies each trip's typical price.
 
+## If email stops working
+
+Prices are always saved, and any sale that couldn't be sent waits and goes out on the next run that can send. Flightwatch also opens one GitHub issue called "Flightwatch can't send email" with the exact reason and the waiting deals. GitHub notifies you about it, and it closes itself once email works again. The issue never includes anyone's email address.
+
+The usual Gmail problem is "rejected the login" (error 535). That means the app password doesn't belong to the `SMTP_USER` account. App passwords are tied to whichever Google account was signed in when you made it, so on a phone that's signed in to several accounts, switch to the sender account first (tap your profile picture at myaccount.google.com), make sure 2-Step Verification is on, create the app password, and update `SMTP_PASSWORD`.
+
 ## Basecamp pings (optional)
 
 [Basecamp](https://github.com/AidenHodgson/basecamp) is a personal message board app. If you mark a person "Basecamp" on the admin page and set `BASECAMP_URL` and `BASECAMP_POST_TOKEN`, their deals post there as alerts (which push to their phone) instead of email. If the post fails, it falls back to email. Ignore this if you don't use Basecamp.

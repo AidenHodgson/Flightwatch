@@ -30,32 +30,54 @@ def _sender():
     return _env("FROM_EMAIL") or _env("SMTP_USER")
 
 
+class EmailLoginError(Exception):
+    """Gmail (or another server) rejected the username or password."""
+
+
 def _smtp(to, subject, html, text):
     msg = MIMEMultipart("alternative")
     msg["Subject"], msg["From"], msg["To"] = subject, _sender(), to
     msg.attach(MIMEText(text, "plain"))
     msg.attach(MIMEText(html, "html"))
     host, user, pw = _env("SMTP_HOST"), _env("SMTP_USER"), _env("SMTP_PASSWORD")
-    raw = os.environ.get("SMTP_PASSWORD") or ""
-    # Safe to log: lengths only, never the password
-    print(f"SMTP login as {user}: password {len(pw)} chars after cleanup "
-          f"({len(raw)} raw, {sum(1 for c in raw if ord(c) > 127)} non-ASCII)")
+    if not pw:
+        raise EmailLoginError("SMTP_PASSWORD is empty. Add it as a GitHub secret.")
     port = int(_env("SMTP_PORT", "587") or "587")
-    try:
-        with smtplib.SMTP(host, port, timeout=30) as s:
-            s.ehlo()
-            s.starttls()
-            s.ehlo()
-            s.login(user, pw)
-            s.send_message(msg)
-    except smtplib.SMTPAuthenticationError:
-        raise
-    except (smtplib.SMTPServerDisconnected, OSError) as e:
-        # Gmail sometimes drops port 587 from cloud servers; try SSL on 465
-        print(f"SMTP on {port} failed ({e}), trying SSL on 465")
-        with smtplib.SMTP_SSL(host, 465, timeout=30) as s:
-            s.login(user, pw)
-            s.send_message(msg)
+
+    last = None
+    # Try the configured port first, then the other one. Gmail supports both.
+    for p in [port] + [x for x in (587, 465) if x != port]:
+        try:
+            if p == 465:
+                s = smtplib.SMTP_SSL(host, 465, timeout=30)
+                s.ehlo()
+            else:
+                s = smtplib.SMTP(host, p, timeout=30)
+                s.ehlo()
+                s.starttls()
+                s.ehlo()
+            with s:
+                # One login method on purpose. smtplib.login() tries several, and
+                # Gmail hangs up after the first failure, which hides the real error.
+                s.user, s.password = user, pw
+                try:
+                    s.auth("PLAIN", s.auth_plain)
+                except smtplib.SMTPAuthenticationError as e:
+                    raise EmailLoginError(
+                        f"The mail server rejected the login for the SMTP_USER account "
+                        f"({e.smtp_code}). For Gmail this means the app password is wrong "
+                        "for that account: make a new app password while signed in to that "
+                        "exact Gmail account (2-Step Verification must be on), then update "
+                        "the SMTP_PASSWORD secret."
+                    ) from None
+                s.send_message(msg)
+                return
+        except EmailLoginError:
+            raise  # a wrong password won't fix itself on another port
+        except (smtplib.SMTPException, OSError) as e:
+            last = e
+            print(f"SMTP on port {p} failed ({e!r}), trying the other port")
+    raise last
 
 
 def _resend(to, subject, html, text):
