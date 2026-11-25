@@ -9,7 +9,7 @@ import httpx
 
 
 def enabled():
-    return bool(os.environ.get("BASECAMP_URL") and os.environ.get("BASECAMP_POST_TOKEN"))
+    return bool(os.environ.get("BASECAMP_URL", "").strip() and os.environ.get("BASECAMP_POST_TOKEN", "").strip())
 
 
 def post_basecamp(deal_list, manage_url=None):
@@ -24,8 +24,8 @@ def post_basecamp(deal_list, manage_url=None):
         lines.append(f"\n[[url:{manage_url}|Change your routes]]")
     n = len(deal_list)
     r = httpx.post(
-        os.environ["BASECAMP_URL"].rstrip("/") + "/messages",
-        headers={"Authorization": f"Bearer {os.environ['BASECAMP_POST_TOKEN']}"},
+        os.environ["BASECAMP_URL"].strip().rstrip("/") + "/messages",
+        headers={"Authorization": f"Bearer {os.environ['BASECAMP_POST_TOKEN'].strip()}"},
         json={
             "kind": "alert",
             "author": "flightwatch",

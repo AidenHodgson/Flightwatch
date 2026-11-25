@@ -6,9 +6,10 @@ import httpx
 
 class D1:
     def __init__(self, account_id=None, database_id=None, api_token=None):
-        self.account_id = account_id or os.environ["CF_ACCOUNT_ID"]
-        self.database_id = database_id or os.environ["D1_DATABASE_ID"]
-        self.api_token = api_token or os.environ["CF_API_TOKEN"]
+        # .strip() because secrets pasted on a phone often pick up a trailing newline
+        self.account_id = (account_id or os.environ["CF_ACCOUNT_ID"]).strip()
+        self.database_id = (database_id or os.environ["D1_DATABASE_ID"]).strip()
+        self.api_token = (api_token or os.environ["CF_API_TOKEN"]).strip()
         self.url = (
             f"https://api.cloudflare.com/client/v4/accounts/{self.account_id}"
             f"/d1/database/{self.database_id}/query"

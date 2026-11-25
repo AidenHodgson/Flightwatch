@@ -7,16 +7,22 @@ from email.mime.text import MIMEText
 import httpx
 
 
+def _env(name, default=""):
+    # Trim pasted secrets; Gmail app passwords are shown with spaces, so drop those too
+    v = (os.environ.get(name) or default).strip()
+    return v.replace(" ", "") if name == "SMTP_PASSWORD" else v
+
+
 def send(to, subject, html, text):
-    if os.environ.get("SMTP_HOST"):
+    if _env("SMTP_HOST"):
         return _smtp(to, subject, html, text)
-    if os.environ.get("RESEND_API_KEY"):
+    if _env("RESEND_API_KEY"):
         return _resend(to, subject, html, text)
     print(f"--- email to {to}: {subject}\n{text}\n")
 
 
 def _sender():
-    return os.environ.get("FROM_EMAIL") or os.environ.get("SMTP_USER")
+    return _env("FROM_EMAIL") or _env("SMTP_USER")
 
 
 def _smtp(to, subject, html, text):
@@ -24,17 +30,17 @@ def _smtp(to, subject, html, text):
     msg["Subject"], msg["From"], msg["To"] = subject, _sender(), to
     msg.attach(MIMEText(text, "plain"))
     msg.attach(MIMEText(html, "html"))
-    port = int(os.environ.get("SMTP_PORT", "587"))
-    with smtplib.SMTP(os.environ["SMTP_HOST"], port) as s:
+    port = int(_env("SMTP_PORT", "587") or "587")
+    with smtplib.SMTP(_env("SMTP_HOST"), port) as s:
         s.starttls()
-        s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
+        s.login(_env("SMTP_USER"), _env("SMTP_PASSWORD"))
         s.send_message(msg)
 
 
 def _resend(to, subject, html, text):
     r = httpx.post(
         "https://api.resend.com/emails",
-        headers={"Authorization": f"Bearer {os.environ['RESEND_API_KEY']}"},
+        headers={"Authorization": f"Bearer {_env('RESEND_API_KEY')}"},
         json={"from": _sender(), "to": [to], "subject": subject, "html": html, "text": text},
         timeout=30,
     )
