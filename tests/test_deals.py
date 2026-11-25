@@ -27,3 +27,11 @@ def test_sample_departures():
     ds = sample_departures(1, every_days=10, today=date(2026, 1, 1))
     assert ds[0] == date(2026, 1, 15)
     assert all(d <= date(2026, 1, 31) for d in ds)
+
+
+
+def test_is_sale_uses_google_numbers():
+    assert deals.is_sale(520, 768, 580, 30)
+    assert not deals.is_sale(560, 768, 580, 30)   # under range but only 27% off
+    assert not deals.is_sale(600, 900, 580, 30)   # 33% off but not under range
+    assert not deals.is_sale(300, None, None, 30)

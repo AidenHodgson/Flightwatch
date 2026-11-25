@@ -63,17 +63,19 @@ def run(test=False):
         normal = deals.baseline(history, days_seen)
         found = []
         for depart in sample_departures(months, every_days=every):
-            price = checker.cheapest_round_trip(origin, dest, cabin, depart, nights)
-            if price is None:
+            r = checker.check(origin, dest, cabin, depart, nights)
+            if r is None:
                 continue
             ret = depart + timedelta(days=nights)
-            found.append((price, depart.isoformat(), ret.isoformat()))
+            found.append((r["price"], depart.isoformat(), ret.isoformat(), r.get("typical"), r.get("range_low")))
             db.execute(
-                """INSERT INTO prices (origin, destination, cabin, depart_date, return_date, price)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                [origin, dest, cabin, depart.isoformat(), ret.isoformat(), price],
+                """INSERT INTO prices (origin, destination, cabin, depart_date, return_date, price,
+                                       typical, range_low, range_high)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                [origin, dest, cabin, depart.isoformat(), ret.isoformat(), r["price"],
+                 r.get("typical"), r.get("range_low"), r.get("range_high")],
             )
-        log.info("%s-%s %s %sn: %d prices, normal=%s", origin, dest, cabin, nights, len(found), normal)
+        log.info("%s-%s %s %sn: %d prices, own normal=%s", origin, dest, cabin, nights, len(found), normal)
         if not found:
             continue
 
@@ -87,20 +89,29 @@ def run(test=False):
                 )
             ]
             pick = None
-            for price, dep, ret in found:  # cheapest first
-                if deals.is_deal(price, normal, w["drop_pct"], w["max_price"]) and deals.should_alert(price, recent):
-                    pick = (price, dep, ret)
+            for price, dep, ret, typical, range_low in found:  # cheapest first
+                if typical and range_low:
+                    # Google's numbers for this exact search: available from day one
+                    sale = deals.is_sale(price, typical, range_low, w["drop_pct"])
+                    usual = typical
+                else:
+                    # Fall back to Flightwatch's own price history
+                    sale = deals.is_deal(price, normal, w["drop_pct"])
+                    usual = normal
+                cheap_enough = w["max_price"] is not None and price <= w["max_price"]
+                if (sale or cheap_enough) and deals.should_alert(price, recent):
+                    pick = (price, dep, ret, usual)
                     break
             if pick is None:
                 continue
-            price, dep, ret = pick
+            price, dep, ret, usual = pick
             entry = per_user.setdefault(w["user_email"], {
                 "name": w["user_name"], "deals": [],
                 "token": w.get("user_token"), "basecamp": w.get("user_basecamp"),
             })
             entry["deals"].append({
                 "origin": origin, "destination": dest, "price": price,
-                "normal": int(normal) if normal else None,
+                "normal": int(usual) if usual else None,
                 "depart": dep, "return": ret, "link": booking_link(origin, dest, dep, ret),
             })
             db.execute(

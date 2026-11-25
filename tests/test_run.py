@@ -20,11 +20,11 @@ class FakeD1:
 
 
 class FakeChecker:
-    def __init__(self, price):
-        self.price = price
+    def __init__(self, price, typical=None, range_low=None):
+        self.price, self.typical, self.range_low = price, typical, range_low
 
-    def cheapest_round_trip(self, *a):
-        return self.price
+    def check(self, *a):
+        return {"price": self.price, "typical": self.typical, "range_low": self.range_low, "range_high": None}
 
 
 def test_run_sends_deal_once(monkeypatch):
@@ -83,3 +83,21 @@ def test_no_sale_without_history(monkeypatch):
     monkeypatch.setattr(main, "PriceChecker", lambda: FakeChecker(300))
     main.run()  # cheap, but no history yet, so it isn't a "sale"
     assert sent == []
+
+
+
+def test_google_typical_price_works_day_one(monkeypatch):
+    db = FakeD1()
+    db.execute("INSERT INTO users (name, email) VALUES ('Dad', 'dad@x.com')")
+    db.execute("INSERT INTO watches (user_id, origin, destination) VALUES (1, 'ATL', 'FRA')")
+    sent = []
+    monkeypatch.setattr(main, "D1", lambda: db)
+    monkeypatch.setattr(main.mailer, "send", lambda *a: sent.append(a))
+    # typical $768, usual range from $580: $600 is cheaper but not a sale
+    monkeypatch.setattr(main, "PriceChecker", lambda: FakeChecker(600, 768, 580))
+    main.run()
+    assert sent == []
+    # $520 is under the range and 32% off typical: sale, with no history at all
+    monkeypatch.setattr(main, "PriceChecker", lambda: FakeChecker(520, 768, 580))
+    main.run()
+    assert len(sent) == 1 and "$520" in sent[0][3] and "usually about $768" in sent[0][3]

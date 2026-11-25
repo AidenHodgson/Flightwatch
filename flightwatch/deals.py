@@ -20,6 +20,14 @@ def baseline(history, days_seen=MIN_DAYS):
     return median(history)
 
 
+def is_sale(price, typical, range_low, drop_pct):
+    """A sale by Google's own numbers: below the route's usual price range
+    AND at least drop_pct below its typical price. Works from the first run."""
+    if not typical or not range_low:
+        return False
+    return price < range_low and price <= typical * (1 - drop_pct / 100)
+
+
 def is_deal(price, normal, drop_pct, max_price=None):
     if max_price is not None and price <= max_price:
         return True

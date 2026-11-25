@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS prices (
   depart_date TEXT NOT NULL,
   return_date TEXT NOT NULL,
   price INTEGER NOT NULL,
+  typical INTEGER,                 -- Google's typical price for this search
+  range_low INTEGER,               -- Google's usual price range
+  range_high INTEGER,
   airline TEXT,
   stops INTEGER,
   checked_at TEXT NOT NULL DEFAULT (datetime('now'))

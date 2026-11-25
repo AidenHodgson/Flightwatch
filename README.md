@@ -9,7 +9,7 @@ It's a small, open-source take on paid deal services like Thrifty Traveler or Go
 1. **You add people, they pick routes.** You add someone from the admin page and send them their private link. On their settings page they add routes (like ATL to Rome for 5 to 10 nights, any time in the next 6 months), pick a cabin, set how big a drop counts as a deal, set a max price, or pause alerts.
 2. **A check runs every 3 hours on GitHub Actions.** Every unique route is searched once, even if several people watch it. Departure dates are sampled every 10 days across the window.
 3. **Prices are saved** to a free Cloudflare D1 database, so Flightwatch builds a price history for each route.
-4. **Only sales get emailed**, each with a "Manage your routes" button that opens that person's settings page. A fare counts as a sale when it's at least 30% below the route's normal (median) price over the last 60 days. Flightwatch waits until it has at least 3 days of prices for a route before calling anything a sale, so a route that's just always cheap won't trigger alerts. (You can also set a max price per route if you want an alert whenever it's under a number, sale or not. It's off by default.) Each person gets one email with all their deals, and the same deal isn't sent twice in a week unless the price drops another 10%.
+4. **Only sales get emailed**, each with a "Manage your routes" button that opens that person's settings page. A fare counts as a sale when it's **below the usual price range Google shows for that trip and at least 30% under its typical price** (the same numbers behind Google Flights' "prices are currently low" note). Because Google supplies those numbers on every search, sales can be spotted from the very first run. If Google ever leaves them out, Flightwatch falls back to its own price history, and only calls something a sale once a route has 3 days of history. Each person gets one email with all their sales, and the same deal isn't sent twice in a week unless the price drops another 10%. (You can also set a max price per route if you want an alert whenever it's under a number, sale or not. It's off by default.)
 
 Prices come from [fli](https://github.com/punitarani/fli), an open-source library that reads Google Flights the way a browser does. There's no official Google Flights API, so if Google changes its site, a run may fail until fli is updated.
 
@@ -97,7 +97,7 @@ python -m flightwatch.manage pause-watch 3
 
 Go to **Actions > Check flights > Run workflow** and tick **Also send everyone a short test email**. Everyone gets a short "Flightwatch is set up" note (no fares) so you know email works. After that it runs on its own every 3 hours. A deal only gets sent once a week unless the price drops another 10%, so frequent checks won't spam anyone.
 
-The first few days only build price history. Sale alerts start once each route has 3 days of prices.
+Sale alerts can start from the first run, since Google supplies each trip's typical price.
 
 ## Basecamp pings (optional)
 
