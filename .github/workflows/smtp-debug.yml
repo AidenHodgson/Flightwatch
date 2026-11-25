@@ -1,0 +1,13 @@
+name: SMTP debug (temporary)
+on:
+  push:
+    paths: ["debug/**"]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python debug/smtp_probe.py
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER || 'flightwatchalerts@gmail.com' }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
