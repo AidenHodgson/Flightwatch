@@ -107,25 +107,32 @@ def run(test=False):
             price, dep, ret, usual = pick
             entry = per_user.setdefault(w["user_email"], {
                 "name": w["user_name"], "deals": [],
-                "token": w.get("user_token"), "basecamp": w.get("user_basecamp"),
+                "token": w.get("user_token"), "basecamp": w.get("user_basecamp"), "sent": [],
             })
             entry["deals"].append({
                 "origin": origin, "destination": dest, "price": price,
                 "normal": int(usual) if usual else None,
                 "depart": dep, "return": ret, "link": booking_link(origin, dest, dep, ret),
             })
-            db.execute(
-                "INSERT INTO alerts (watch_id, depart_date, return_date, price) VALUES (?, ?, ?, ?)",
-                [w["id"], dep, ret, price],
-            )
+            entry["sent"].append((w["id"], dep, ret, price))
 
     site = os.environ.get("SITE_URL", "").strip().rstrip("/")
     failed = []
+    def record(info):
+        # Only remember a deal as sent once it actually went out,
+        # so a failed email gets retried on the next run
+        for watch_id, dep, ret, price in info["sent"]:
+            db.execute(
+                "INSERT INTO alerts (watch_id, depart_date, return_date, price) VALUES (?, ?, ?, ?)",
+                [watch_id, dep, ret, price],
+            )
+
     for email, info in per_user.items():
         manage_url = f"{site}/u/{info['token']}" if site and info.get("token") else None
         if info.get("basecamp") and notify.enabled():
             try:
                 notify.post_basecamp(info["deals"], manage_url)
+                record(info)
                 log.info("posted %d to Basecamp for %s", len(info["deals"]), info["name"])
                 continue
             except Exception as e:  # fall back to email
@@ -133,6 +140,7 @@ def run(test=False):
         subject, html, text = mailer.render(info["name"], info["deals"], manage_url)
         try:
             mailer.send(email, subject, html, text)
+            record(info)
             log.info("emailed %s (%d)", email, len(info["deals"]))
         except Exception as e:  # one bad email shouldn't stop the others
             failed.append(email)

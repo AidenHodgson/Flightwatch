@@ -101,3 +101,26 @@ def test_google_typical_price_works_day_one(monkeypatch):
     monkeypatch.setattr(main, "PriceChecker", lambda: FakeChecker(520, 768, 580))
     main.run()
     assert len(sent) == 1 and "$520" in sent[0][3] and "usually about $768" in sent[0][3]
+
+
+
+def test_failed_email_is_retried_next_run(monkeypatch):
+    db = FakeD1()
+    db.execute("INSERT INTO users (name, email) VALUES ('Dad', 'dad@x.com')")
+    db.execute("INSERT INTO watches (user_id, origin, destination) VALUES (1, 'ATL', 'FRA')")
+    monkeypatch.setattr(main, "D1", lambda: db)
+    monkeypatch.setattr(main, "PriceChecker", lambda: FakeChecker(520, 768, 580))
+
+    def boom(*a):
+        raise OSError("gmail down")
+    monkeypatch.setattr(main.mailer, "send", boom)
+    try:
+        main.run()
+    except SystemExit:
+        pass
+    assert db.query("SELECT COUNT(*) n FROM alerts")[0]["n"] == 0
+
+    sent = []
+    monkeypatch.setattr(main.mailer, "send", lambda *a: sent.append(a))
+    main.run()
+    assert len(sent) == 1

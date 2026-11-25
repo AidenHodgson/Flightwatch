@@ -1,5 +1,6 @@
 """Send alert emails with Gmail/any SMTP, or Resend. Prints if neither is set."""
 import os
+import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -8,9 +9,13 @@ import httpx
 
 
 def _env(name, default=""):
-    # Trim pasted secrets; Gmail app passwords are shown with spaces, so drop those too
     v = (os.environ.get(name) or default).strip()
-    return v.replace(" ", "") if name == "SMTP_PASSWORD" else v
+    if name == "SMTP_PASSWORD":
+        # Gmail app passwords are 16 letters shown in groups. Pasting on a phone can
+        # add normal or invisible spaces, and anything that isn't plain ASCII makes
+        # Gmail hang up mid-login, so keep only letters and digits.
+        v = re.sub(r"[^A-Za-z0-9]", "", v)
+    return v
 
 
 def send(to, subject, html, text):
@@ -31,6 +36,10 @@ def _smtp(to, subject, html, text):
     msg.attach(MIMEText(text, "plain"))
     msg.attach(MIMEText(html, "html"))
     host, user, pw = _env("SMTP_HOST"), _env("SMTP_USER"), _env("SMTP_PASSWORD")
+    raw = os.environ.get("SMTP_PASSWORD") or ""
+    # Safe to log: lengths only, never the password
+    print(f"SMTP login as {user}: password {len(pw)} chars after cleanup "
+          f"({len(raw)} raw, {sum(1 for c in raw if ord(c) > 127)} non-ASCII)")
     port = int(_env("SMTP_PORT", "587") or "587")
     try:
         with smtplib.SMTP(host, port, timeout=30) as s:
