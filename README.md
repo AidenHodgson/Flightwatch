@@ -36,6 +36,9 @@ Pick one:
 
 ### 4. Add GitHub secrets
 
+The settings that aren't secret (database ID, email server, sender address, site URL) sit at the top of the `env:` block in `.github/workflows/check.yml`. Change those to yours. Anything you also add as a secret or variable with the same name wins over the file.
+
+
 In your repo, go to **Settings > Secrets and variables > Actions** and add:
 
 | Secret | What it is |

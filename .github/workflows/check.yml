@@ -27,17 +27,19 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Run Flightwatch
         env:
+          # Settings that aren't secret. Change these for your own copy.
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID || '7fd78c7f-f1f6-4cf9-b942-0403e3873dc8' }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST || 'smtp.gmail.com' }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT || '587' }}
+          SMTP_USER: ${{ secrets.SMTP_USER || 'flightwatchalerts@gmail.com' }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL || 'Flightwatch <flightwatchalerts@gmail.com>' }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://flightwatch.aidentjhodgson.workers.dev' }}
+          BASECAMP_URL: ${{ secrets.BASECAMP_URL || 'https://basecamp.aidentjhodgson.workers.dev' }}
+          SAMPLE_EVERY_DAYS: ${{ vars.SAMPLE_EVERY_DAYS || '10' }}
+          # Real secrets: add these under Settings > Secrets and variables > Actions
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
-          SITE_URL: ${{ vars.SITE_URL }}
-          BASECAMP_URL: ${{ secrets.BASECAMP_URL }}
           BASECAMP_POST_TOKEN: ${{ secrets.BASECAMP_POST_TOKEN }}
-          SAMPLE_EVERY_DAYS: ${{ vars.SAMPLE_EVERY_DAYS || '10' }}
         run: python -m flightwatch.main ${{ inputs.report && '--report' || '' }}
