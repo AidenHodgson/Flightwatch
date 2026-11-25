@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
   active INTEGER NOT NULL DEFAULT 1,
   token TEXT,                      -- secret for their settings page link
   basecamp INTEGER NOT NULL DEFAULT 0, -- 1 = also ping a Basecamp app (optional)
+  airlines TEXT,                   -- e.g. 'DL' or 'DL,AF'; empty = any airline
+  airline_mode TEXT NOT NULL DEFAULT 'prefer', -- 'prefer' (fall back if they don't fly it) or 'only'
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token);

@@ -99,6 +99,19 @@ Go to **Actions > Check flights > Run workflow** and tick **Also send everyone a
 
 Sale alerts can start from the first run, since Google supplies each trip's typical price.
 
+## Airlines
+
+Each person can pick airlines on their settings page. A trip counts for an airline if any flight in it is on that airline, so Delta includes Delta plus a partner leg like KLM or Korean Air. Two modes:
+
+- **Prefer** (default): only those airlines, except on routes they don't fly on any date checked, where the best other airline is shown and labeled as such.
+- **Only**: those airlines, always.
+
+Google's typical price is for the whole route (all airlines), so a sale on your airline means it's cheap compared to everyone, not just to itself.
+
+## What a sale email shows
+
+For each route: the sale price next to the usual price, percent off and dollars saved, the airline and stops, the cheapest dates, **when the sale runs** (for example "February only" or "mid-January to late-February (this winter)") and how many of the checked departure dates are on sale, plus Google's usual range for the trip. Sales also need to save at least $150, so small dips never send an email.
+
 ## If email stops working
 
 Prices are always saved, and any sale that couldn't be sent waits and goes out on the next run that can send. Flightwatch also opens one GitHub issue called "Flightwatch can't send email" with the exact reason and the waiting deals. GitHub notifies you about it, and it closes itself once email works again. The issue never includes anyone's email address.

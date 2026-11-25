@@ -8,9 +8,9 @@ Usage:
 import argparse
 import logging
 import os
-from datetime import timedelta
+from datetime import date, timedelta
 
-from . import deals, github_alert, mailer, notify
+from . import airlines, deals, github_alert, mailer, notify, window
 from .db import D1
 from .search import PriceChecker, booking_link, sample_departures
 
@@ -21,7 +21,8 @@ HISTORY_DAYS = 60
 def load_watches(db):
     return db.query(
         """SELECT w.*, u.name AS user_name, u.email AS user_email,
-                  u.token AS user_token, u.basecamp AS user_basecamp
+                  u.token AS user_token, u.basecamp AS user_basecamp,
+                  u.airlines AS user_airlines, u.airline_mode AS user_airline_mode
            FROM watches w JOIN users u ON u.id = w.user_id
            WHERE w.active = 1 AND u.active = 1"""
     )
@@ -42,6 +43,65 @@ def route_history(db, origin, destination, cabin):
     return [r["price"] for r in rows], len({r["day"] for r in rows})
 
 
+def pick_options(w, results):
+    """Each date's itineraries, narrowed to the person's airlines.
+
+    'only' mode: just those airlines. 'prefer' mode (the default): those airlines
+    if they fly this route on any date we checked, otherwise any airline."""
+    wanted = airlines.parse(w.get("user_airlines"))
+    per_date = [(dep, ret, r, r.get("options") or [{"price": r["price"], "airlines": [], "stops": None}])
+                for dep, ret, r in results]
+    if not wanted:
+        return per_date, False
+    narrowed = [(dep, ret, r, [o for o in opts if airlines.matches(o, wanted)]) for dep, ret, r, opts in per_date]
+    if (w.get("user_airline_mode") or "prefer") == "only" or any(opts for *_, opts in narrowed):
+        return narrowed, False
+    return per_date, True  # nothing on their airlines here, so fall back to any
+
+
+def evaluate_watch(w, results, normal):
+    """Find this person's sale on this route, or None. Looks at every date so the
+    email can say when the sale runs (one week, a month, a whole season)."""
+    last_day = date.today() + timedelta(days=30 * w["months_ahead"])
+    dated, fell_back = pick_options(w, [x for x in results if x[0] <= last_day])
+    checked, sales = 0, []
+    for dep, ret, r, opts in dated:
+        if not opts:
+            continue
+        checked += 1
+        best = opts[0]
+        price, typical, range_low = best["price"], r.get("typical"), r.get("range_low")
+        if typical and range_low:
+            sale = deals.is_sale(price, typical, range_low, w["drop_pct"])  # Google's numbers
+            usual = typical
+        else:
+            sale = deals.is_deal(price, normal, w["drop_pct"])  # our own history
+            usual = normal
+        cheap_enough = w["max_price"] is not None and price <= w["max_price"]
+        if sale or cheap_enough:
+            sales.append({"dep": dep, "ret": ret, "price": price, "usual": usual, "option": best,
+                          "range": (r.get("range_low"), r.get("range_high"))})
+    if not sales:
+        return None
+    top = min(sales, key=lambda x: x["price"])
+    usual = int(top["usual"]) if top["usual"] else None
+    return {
+        "origin": w["origin"], "destination": w["destination"],
+        "price": top["price"], "normal": usual,
+        "pct_off": round(100 * (1 - top["price"] / usual)) if usual else None,
+        "range_low": top["range"][0], "range_high": top["range"][1],
+        "depart": top["dep"].isoformat(), "return": top["ret"].isoformat(),
+        "nights": (top["ret"] - top["dep"]).days,
+        "flight": airlines.describe(top["option"]),
+        "other_airline": fell_back,
+        "window": window.describe([x["dep"] for x in sales]),
+        "window_share": window.share(len(sales), checked),
+        "sale_dates": len(sales),
+        "price_span": (min(x["price"] for x in sales), max(x["price"] for x in sales)),
+        "link": booking_link(w["origin"], w["destination"], top["dep"].isoformat(), top["ret"].isoformat()),
+    }
+
+
 def run(test=False):
     db = D1()
     checker = PriceChecker()
@@ -56,18 +116,20 @@ def run(test=False):
     for w in watches:
         groups.setdefault(route_key(w), []).append(w)
 
-    per_user = {}  # email -> {"name":..., "deals": [...]}
+    per_user = {}  # email -> {"name", "deals", "token", "basecamp", "sent"}
     for (origin, dest, cabin, nights), ws in groups.items():
         months = max(w["months_ahead"] for w in ws)
         history, days_seen = route_history(db, origin, dest, cabin)
         normal = deals.baseline(history, days_seen)
-        found = []
+
+        # One search per departure date, shared by everyone watching this route
+        results = []
         for depart in sample_departures(months, every_days=every):
             r = checker.check(origin, dest, cabin, depart, nights)
             if r is None:
                 continue
             ret = depart + timedelta(days=nights)
-            found.append((r["price"], depart.isoformat(), ret.isoformat(), r.get("typical"), r.get("range_low")))
+            results.append((depart, ret, r))
             db.execute(
                 """INSERT INTO prices (origin, destination, cabin, depart_date, return_date, price,
                                        typical, range_low, range_high)
@@ -75,49 +137,30 @@ def run(test=False):
                 [origin, dest, cabin, depart.isoformat(), ret.isoformat(), r["price"],
                  r.get("typical"), r.get("range_low"), r.get("range_high")],
             )
-        log.info("%s-%s %s %sn: %d prices, own normal=%s", origin, dest, cabin, nights, len(found), normal)
-        if not found:
+        log.info("%s-%s %s %sn: %d prices, own normal=%s", origin, dest, cabin, nights, len(results), normal)
+        if not results:
             continue
 
-        found.sort()
         for w in ws:
-            recent = [
-                r["price"]
-                for r in db.query(
-                    "SELECT price FROM alerts WHERE watch_id=? AND sent_at >= datetime('now', ?)",
-                    [w["id"], f"-{deals.REALERT_DAYS} days"],
-                )
-            ]
-            pick = None
-            for price, dep, ret, typical, range_low in found:  # cheapest first
-                if typical and range_low:
-                    # Google's numbers for this exact search: available from day one
-                    sale = deals.is_sale(price, typical, range_low, w["drop_pct"])
-                    usual = typical
-                else:
-                    # Fall back to Flightwatch's own price history
-                    sale = deals.is_deal(price, normal, w["drop_pct"])
-                    usual = normal
-                cheap_enough = w["max_price"] is not None and price <= w["max_price"]
-                if (sale or cheap_enough) and deals.should_alert(price, recent):
-                    pick = (price, dep, ret, usual)
-                    break
-            if pick is None:
+            deal = evaluate_watch(w, results, normal)
+            if deal is None:
                 continue
-            price, dep, ret, usual = pick
+            recent = [r["price"] for r in db.query(
+                "SELECT price FROM alerts WHERE watch_id=? AND sent_at >= datetime('now', ?)",
+                [w["id"], f"-{deals.REALERT_DAYS} days"],
+            )]
+            if not deals.should_alert(deal["price"], recent):
+                continue
             entry = per_user.setdefault(w["user_email"], {
                 "name": w["user_name"], "deals": [],
                 "token": w.get("user_token"), "basecamp": w.get("user_basecamp"), "sent": [],
             })
-            entry["deals"].append({
-                "origin": origin, "destination": dest, "price": price,
-                "normal": int(usual) if usual else None,
-                "depart": dep, "return": ret, "link": booking_link(origin, dest, dep, ret),
-            })
-            entry["sent"].append((w["id"], dep, ret, price))
+            entry["deals"].append(deal)
+            entry["sent"].append((w["id"], deal["depart"], deal["return"], deal["price"]))
 
     site = os.environ.get("SITE_URL", "").strip().rstrip("/")
     failed, pending, errors = [], [], []
+
     def record(info):
         # Only remember a deal as sent once it actually went out,
         # so a failed email gets retried on the next run

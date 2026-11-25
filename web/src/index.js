@@ -23,6 +23,13 @@ const AIRPORTS = [
   ["SYD", "Sydney"], ["AKL", "Auckland"],
 ];
 const AIRPORT_NAME = Object.fromEntries(AIRPORTS);
+const AIRLINES = [
+  ["DL", "Delta"], ["AA", "American"], ["UA", "United"], ["WN", "Southwest"], ["B6", "JetBlue"],
+  ["AS", "Alaska"], ["AC", "Air Canada"], ["AF", "Air France"], ["KL", "KLM"], ["VS", "Virgin Atlantic"],
+  ["BA", "British Airways"], ["LH", "Lufthansa"], ["TK", "Turkish"], ["QR", "Qatar"], ["EK", "Emirates"],
+  ["KE", "Korean Air"], ["NH", "ANA"], ["JL", "Japan Airlines"], ["SQ", "Singapore Airlines"], ["CX", "Cathay Pacific"],
+];
+const AIRLINE_CODES = new Set(AIRLINES.map(([c]) => c));
 
 // Starter routes every new person gets (they can remove any of them).
 // Keep in sync with DEFAULT_ROUTES in flightwatch/manage.py.
@@ -126,6 +133,9 @@ async function userPage(env, user, base, msg) {
       </div>
     </section>
 
+    <h2>Airlines</h2>
+    ${airlineForm(user, base)}
+
     <h2>Your routes</h2>
     ${rows || `<div class="card"><p class="muted">No routes yet. Add your own below, or start with ${DEFAULT_ROUTES.length} popular ones in Europe and Asia.</p>
       <form method="post" action="${base}/starter" class="row"><input name="origin" list="airports" value="${DEFAULT_ORIGIN}" maxlength="3" class="code" aria-label="Home airport"><button>Add starter routes</button></form></div>`}
@@ -141,6 +151,25 @@ async function userPage(env, user, base, msg) {
     <datalist id="airports">${AIRPORTS.map(([c, n]) => `<option value="${c}">${n}</option>`).join("")}</datalist>
     <p class="muted small">Not seeing your airport? Any 3-letter airport code works. Search "airport code" plus the city to find it.</p>`;
   return page("Your Flightwatch", body);
+}
+
+function airlineForm(user, base) {
+  const chosen = new Set((user.airlines || "").split(",").map((x) => x.trim()).filter(Boolean));
+  const mode = user.airline_mode || "prefer";
+  const summary = chosen.size
+    ? `${[...chosen].map((c) => (AIRLINES.find(([k]) => k === c) || [c, c])[1]).join(", ")}${mode === "only" ? " only" : ", others if needed"}`
+    : "Any airline";
+  return `
+    <details class="card">
+      <summary><div><b>${esc(summary)}</b><div class="muted small">Which airlines count for your alerts</div></div></summary>
+      <form method="post" action="${base}/airlines" class="stack">
+        <div class="chips">${AIRLINES.map(([c, n]) => `<label class="chip"><input type="checkbox" name="airline" value="${c}"${chosen.has(c) ? " checked" : ""}> ${n}</label>`).join("")}</div>
+        <label class="row nogap"><input type="radio" name="mode" value="prefer"${mode !== "only" ? " checked" : ""} style="width:auto"> Use these, but show other airlines on routes they don't fly</label>
+        <label class="row nogap"><input type="radio" name="mode" value="only"${mode === "only" ? " checked" : ""} style="width:auto"> Only these airlines, always</label>
+        <p class="muted small">A trip counts if any flight in it is on your airline, so Delta includes Delta plus a partner like KLM or Korean Air. Leave everything unticked for any airline.</p>
+        <button>Save airlines</button>
+      </form>
+    </details>`;
 }
 
 function watchCard(w, base, low) {
@@ -198,6 +227,13 @@ async function userAction(env, user, action, form) {
   if (action === "alerts") {
     await env.DB.prepare("UPDATE users SET active = ? WHERE id = ?").bind(user.active ? 0 : 1, user.id).run();
     return user.active ? "Alerts paused" : "Alerts are back on";
+  }
+  if (action === "airlines") {
+    const picked = form.getAll("airline").map(String).filter((c) => AIRLINE_CODES.has(c));
+    const mode = form.get("mode") === "only" ? "only" : "prefer";
+    await env.DB.prepare("UPDATE users SET airlines = ?, airline_mode = ? WHERE id = ?")
+      .bind(picked.length ? picked.join(",") : null, mode, user.id).run();
+    return picked.length ? "Airlines saved" : "Any airline now counts";
   }
   if (action === "starter") {
     const { n } = await env.DB.prepare("SELECT COUNT(*) AS n FROM watches WHERE user_id = ?").bind(user.id).first();
@@ -340,4 +376,6 @@ input,select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-
 .code{text-transform:uppercase;max-width:120px}.prefix{font-weight:400}
 button{font:inherit;font-weight:600;padding:10px 16px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
 button.ghost{background:transparent;color:var(--accent)}button.danger{border-color:var(--danger);color:var(--danger)}button.small{padding:6px 10px;font-size:13px}
+label.row{flex-direction:row;align-items:center;font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{flex-direction:row;align-items:center;gap:6px;font-weight:500;border:1px solid var(--line);border-radius:999px;padding:6px 12px;background:var(--bg)}.chip input{width:auto;margin:0}
 .note{background:var(--card);border-left:4px solid var(--accent);padding:10px 14px;border-radius:8px;margin:12px 0}`;

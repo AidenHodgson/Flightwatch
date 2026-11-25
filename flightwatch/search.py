@@ -38,7 +38,8 @@ class PriceChecker:
     def check(self, origin, destination, cabin, depart, nights):
         """Cheapest round trip for one departure date, plus Google's price insights.
 
-        Returns {"price", "typical", "range_low", "range_high"} or None.
+        Returns {"price", "options", "typical", "range_low", "range_high"} or None.
+        options lists each itinerary as {"price", "airlines": ["DL", "KE"], "stops"}.
         typical and the range come from the same box Google Flights shows as
         "prices are currently low/typical/high"; they're None if Google didn't
         include them.
@@ -73,16 +74,25 @@ class PriceChecker:
         if not payload:
             return None
         insights = parse_insights(payload)
-        prices = []
+        options = []
         try:
-            prices = [f.price for f in _flights_in(payload) if getattr(f, "price", None)]
+            for f in _flights_in(payload):
+                if not getattr(f, "price", None):
+                    continue
+                options.append({
+                    "price": int(round(f.price)),
+                    "airlines": [leg.airline.name for leg in f.legs],
+                    "stops": max(0, len(f.legs) - 1),
+                })
         except Exception as e:
             log.warning("could not read flights %s-%s %s: %s", origin, destination, depart, e)
-        price = min(prices) if prices else insights.get("current")
+        options.sort(key=lambda o: o["price"])
+        price = options[0]["price"] if options else insights.get("current")
         if not price:
             return None
         return {
-            "price": int(round(price)),
+            "price": int(price),
+            "options": options,  # every itinerary Google showed, cheapest first
             "typical": insights.get("typical"),
             "range_low": insights.get("range_low"),
             "range_high": insights.get("range_high"),

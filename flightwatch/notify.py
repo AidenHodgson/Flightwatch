@@ -14,11 +14,13 @@ def enabled():
 
 def post_basecamp(deal_list, manage_url=None):
     lines = []
+    from .mailer import city
     for d in deal_list:
-        normal = f" (usually about ${d['normal']:,})" if d.get("normal") else ""
+        off = f", {d['pct_off']}% off (usually ${d['normal']:,})" if d.get("pct_off") else ""
         lines.append(
-            f"- **{d['origin']} to {d['destination']}: ${d['price']:,}**{normal}, "
-            f"{d['depart']} to {d['return']} [[url:{d['link']}|Google Flights]]"
+            f"- **{city(d['destination'])} ${d['price']:,}**{off}. {d.get('flight') or ''}. "
+            f"Cheapest {d['depart']} to {d['return']}. On sale {d.get('window') or 'this date'}. "
+            f"[[url:{d['link']}|Google Flights]]"
         )
     if manage_url:
         lines.append(f"\n[[url:{manage_url}|Change your routes]]")

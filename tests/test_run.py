@@ -100,7 +100,7 @@ def test_google_typical_price_works_day_one(monkeypatch):
     # $520 is under the range and 32% off typical: sale, with no history at all
     monkeypatch.setattr(main, "PriceChecker", lambda: FakeChecker(520, 768, 580))
     main.run()
-    assert len(sent) == 1 and "$520" in sent[0][3] and "usually about $768" in sent[0][3]
+    assert len(sent) == 1 and "$520" in sent[0][3] and "(usually $768)" in sent[0][3]
 
 
 
@@ -149,3 +149,62 @@ def test_login_error_opens_backup_issue_and_keeps_deals(monkeypatch):
     assert len(calls) == 1                       # stopped after the first bad login
     assert [n for n, _ in reported[0]] == ["Dad", "Mom"]  # both kept waiting
     assert db.query("SELECT COUNT(*) n FROM alerts")[0]["n"] == 0
+
+
+class OptionsChecker:
+    """Each date offers a cheap American fare and a pricier Delta one."""
+    def __init__(self, aa, dl, typical=1600, range_low=1300):
+        self.aa, self.dl, self.typical, self.range_low = aa, dl, typical, range_low
+
+    def check(self, *a):
+        opts = [{"price": self.aa, "airlines": ["AA"], "stops": 1}]
+        if self.dl:
+            opts.append({"price": self.dl, "airlines": ["DL", "KE"], "stops": 1})
+        opts.sort(key=lambda o: o["price"])
+        return {"price": opts[0]["price"], "options": opts, "typical": self.typical,
+                "range_low": self.range_low, "range_high": 2400}
+
+
+def _setup(db, airlines=None, mode="prefer"):
+    db.execute("INSERT INTO users (name, email, airlines, airline_mode) VALUES ('Aiden', 'a@x.com', ?, ?)", [airlines, mode])
+    db.execute("INSERT INTO watches (user_id, origin, destination, months_ahead) VALUES (1, 'ATL', 'ICN', 2)")
+
+
+def _run(monkeypatch, db, checker):
+    sent = []
+    monkeypatch.setattr(main, "D1", lambda: db)
+    monkeypatch.setattr(main, "PriceChecker", lambda: checker)
+    monkeypatch.setattr(main.mailer, "send", lambda *a: sent.append(a))
+    main.run()
+    return sent
+
+
+def test_delta_only_ignores_cheaper_other_airline_sale(monkeypatch):
+    db = FakeD1(); _setup(db, "DL")
+    # American is on sale ($900), Delta isn't ($1,500): no email for a Delta flyer
+    assert _run(monkeypatch, db, OptionsChecker(aa=900, dl=1500)) == []
+
+
+def test_delta_sale_is_sent_with_details(monkeypatch):
+    db = FakeD1(); _setup(db, "DL")
+    sent = _run(monkeypatch, db, OptionsChecker(aa=900, dl=1000))
+    assert len(sent) == 1
+    body = sent[0][3]
+    assert "Delta and Korean Air, 1 stop" in body and "$1,000" in body and "38% off" in body
+    assert "departure dates we checked" in body
+
+
+def test_prefer_falls_back_when_airline_doesnt_fly_route(monkeypatch):
+    db = FakeD1(); _setup(db, "DL", "prefer")
+    sent = _run(monkeypatch, db, OptionsChecker(aa=900, dl=None))
+    assert len(sent) == 1 and "American" in sent[0][3]
+
+
+def test_only_mode_never_falls_back(monkeypatch):
+    db = FakeD1(); _setup(db, "DL", "only")
+    assert _run(monkeypatch, db, OptionsChecker(aa=900, dl=None)) == []
+
+
+def test_small_savings_are_not_sales():
+    from flightwatch import deals
+    assert not deals.is_sale(300, 420, 320, 25)  # 29% off but only $120 saved

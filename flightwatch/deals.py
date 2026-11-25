@@ -6,6 +6,7 @@ MIN_DAYS = 3              # ...spread over at least this many different days
 REALERT_DAYS = 7          # wait this long before re-sending a similar deal
 # (runs happen every few hours, so this also stops the same deal pinging you all day)
 REALERT_BETTER_PCT = 10   # unless the new price is this much lower
+MIN_SAVINGS = 150         # a sale must save at least this many dollars vs typical
 
 
 def baseline(history, days_seen=MIN_DAYS):
@@ -25,7 +26,9 @@ def is_sale(price, typical, range_low, drop_pct):
     AND at least drop_pct below its typical price. Works from the first run."""
     if not typical or not range_low:
         return False
-    return price < range_low and price <= typical * (1 - drop_pct / 100)
+    return (price < range_low
+            and price <= typical * (1 - drop_pct / 100)
+            and typical - price >= MIN_SAVINGS)
 
 
 def is_deal(price, normal, drop_pct, max_price=None):
