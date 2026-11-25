@@ -31,9 +31,10 @@ def test_run_sends_deal_once(monkeypatch):
     db = FakeD1()
     db.execute("INSERT INTO users (name, email) VALUES ('Dad', 'dad@x.com')")
     db.execute("INSERT INTO watches (user_id, origin, destination) VALUES (1, 'ATL', 'FCO')")
-    for _ in range(20):
-        db.execute("INSERT INTO prices (origin,destination,cabin,depart_date,return_date,price) "
-                   "VALUES ('ATL','FCO','ECONOMY','2027-01-01','2027-01-08',900)")
+    for i in range(20):
+        db.execute("INSERT INTO prices (origin,destination,cabin,depart_date,return_date,price,checked_at) "
+                   "VALUES ('ATL','FCO','ECONOMY','2027-01-01','2027-01-08',900, datetime('now', ?))",
+                   [f"-{i % 4} days"])
     sent = []
     monkeypatch.setattr(main, "D1", lambda: db)
     monkeypatch.setattr(main.mailer, "send", lambda *a: sent.append(a))
@@ -49,8 +50,8 @@ def test_run_sends_deal_once(monkeypatch):
     main.run()
     assert len(sent) == 1  # same deal not re-sent
 
-    main.run(report=True)
-    assert len(sent) == 2 and "test report" in sent[1][1]
+    main.run(test=True)
+    assert len(sent) == 2 and sent[1][1] == "Flightwatch is set up" and "$" not in sent[1][3]
 
 
 def test_basecamp_user_and_manage_link(monkeypatch):
@@ -69,3 +70,16 @@ def test_basecamp_user_and_manage_link(monkeypatch):
     main.run()
     assert len(posted) == 1 and posted[0][1] == "https://fw.example.com/u/tok123"
     assert len(sent) == 1 and sent[0][0] == "dad@x.com" and "/u/dadtok" in sent[0][3]
+
+
+
+def test_no_sale_without_history(monkeypatch):
+    db = FakeD1()
+    db.execute("INSERT INTO users (name, email) VALUES ('Dad', 'dad@x.com')")
+    db.execute("INSERT INTO watches (user_id, origin, destination) VALUES (1, 'ATL', 'FCO')")
+    sent = []
+    monkeypatch.setattr(main, "D1", lambda: db)
+    monkeypatch.setattr(main.mailer, "send", lambda *a: sent.append(a))
+    monkeypatch.setattr(main, "PriceChecker", lambda: FakeChecker(300))
+    main.run()  # cheap, but no history yet, so it isn't a "sale"
+    assert sent == []

@@ -2,9 +2,8 @@
 
 Usage:
   python -m flightwatch.main            # normal run
-  python -m flightwatch.main --report   # also email everyone their cheapest
-                                        # fares even if they aren't deals
-                                        # (handy for testing a new setup)
+  python -m flightwatch.main --test     # also email everyone a short "you're
+                                        # set up" note to check email works
 """
 import argparse
 import logging
@@ -35,15 +34,15 @@ def route_key(w):
 
 def route_history(db, origin, destination, cabin):
     rows = db.query(
-        """SELECT price FROM prices
+        """SELECT price, date(checked_at) AS day FROM prices
            WHERE origin=? AND destination=? AND cabin=?
              AND checked_at >= datetime('now', ?)""",
         [origin, destination, cabin, f"-{HISTORY_DAYS} days"],
     )
-    return [r["price"] for r in rows]
+    return [r["price"] for r in rows], len({r["day"] for r in rows})
 
 
-def run(report=False):
+def run(test=False):
     db = D1()
     checker = PriceChecker()
     every = int(os.environ.get("SAMPLE_EVERY_DAYS", "10"))
@@ -60,7 +59,8 @@ def run(report=False):
     per_user = {}  # email -> {"name":..., "deals": [...]}
     for (origin, dest, cabin, nights), ws in groups.items():
         months = max(w["months_ahead"] for w in ws)
-        normal = deals.baseline(route_history(db, origin, dest, cabin))
+        history, days_seen = route_history(db, origin, dest, cabin)
+        normal = deals.baseline(history, days_seen)
         found = []
         for depart in sample_departures(months, every_days=every):
             price = checker.cheapest_round_trip(origin, dest, cabin, depart, nights)
@@ -91,9 +91,6 @@ def run(report=False):
                 if deals.is_deal(price, normal, w["drop_pct"], w["max_price"]) and deals.should_alert(price, recent):
                     pick = (price, dep, ret)
                     break
-            is_real_deal = pick is not None
-            if pick is None and report:
-                pick = found[0]
             if pick is None:
                 continue
             price, dep, ret = pick
@@ -106,11 +103,10 @@ def run(report=False):
                 "normal": int(normal) if normal else None,
                 "depart": dep, "return": ret, "link": booking_link(origin, dest, dep, ret),
             })
-            if is_real_deal:
-                db.execute(
-                    "INSERT INTO alerts (watch_id, depart_date, return_date, price) VALUES (?, ?, ?, ?)",
-                    [w["id"], dep, ret, price],
-                )
+            db.execute(
+                "INSERT INTO alerts (watch_id, depart_date, return_date, price) VALUES (?, ?, ?, ?)",
+                [w["id"], dep, ret, price],
+            )
 
     site = os.environ.get("SITE_URL", "").strip().rstrip("/")
     failed = []
@@ -124,8 +120,6 @@ def run(report=False):
             except Exception as e:  # fall back to email
                 log.warning("Basecamp post failed, emailing instead: %s", e)
         subject, html, text = mailer.render(info["name"], info["deals"], manage_url)
-        if report:
-            subject = subject.replace("deals", "fares").replace("deal ", "fare ") + " (test report)"
         try:
             mailer.send(email, subject, html, text)
             log.info("emailed %s (%d)", email, len(info["deals"]))
@@ -133,14 +127,36 @@ def run(report=False):
             failed.append(email)
             log.error("could not email %s: %r", email, e)
 
+    if test:
+        failed += send_setup_emails(watches, site)
+
     # Keep the database small: old prices aren't used for "normal" anymore
     db.execute("DELETE FROM prices WHERE checked_at < datetime('now', '-120 days')")
     if failed:
         raise SystemExit(f"Prices saved, but email failed for: {', '.join(failed)}")
 
 
+def send_setup_emails(watches, site):
+    """One short note per person so you can confirm email works. No fares."""
+    people = {}
+    for w in watches:
+        people.setdefault(w["user_email"], {"name": w["user_name"], "token": w.get("user_token"), "n": 0})["n"] += 1
+    failed = []
+    for email, p in people.items():
+        manage_url = f"{site}/u/{p['token']}" if site and p.get("token") else None
+        subject, html, text = mailer.render_setup(p["name"], p["n"], manage_url)
+        try:
+            mailer.send(email, subject, html, text)
+            log.info("sent setup email to %s", email)
+        except Exception as e:
+            failed.append(email)
+            log.error("could not email %s: %r", email, e)
+    return failed
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     p = argparse.ArgumentParser()
-    p.add_argument("--report", action="store_true", help="email cheapest fares even if not deals")
-    run(report=p.parse_args().report)
+    p.add_argument("--test", "--report", dest="test", action="store_true",
+                   help="also send everyone a short setup email (no fares)")
+    run(test=p.parse_args().test)

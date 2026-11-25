@@ -6,7 +6,8 @@ from flightwatch.search import sample_departures
 
 def test_no_baseline_until_enough_history():
     assert deals.baseline([500] * 5) is None
-    assert deals.baseline([500] * 20) == 500
+    assert deals.baseline([500] * 20, days_seen=1) is None  # one day isn't "normal"
+    assert deals.baseline([500] * 20, days_seen=3) == 500
 
 
 def test_is_deal():

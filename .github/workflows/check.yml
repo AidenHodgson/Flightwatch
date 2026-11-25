@@ -5,8 +5,8 @@ on:
     - cron: "17 */3 * * *"   # every 3 hours (GitHub may start it a few minutes late)
   workflow_dispatch:
     inputs:
-      report:
-        description: "Email everyone their cheapest fares (test run)"
+      test:
+        description: "Also send everyone a short test email (no fares)"
         type: boolean
         default: false
 
@@ -42,4 +42,4 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BASECAMP_POST_TOKEN: ${{ secrets.BASECAMP_POST_TOKEN }}
-        run: python -m flightwatch.main ${{ inputs.report && '--report' || '' }}
+        run: python -m flightwatch.main ${{ inputs.test && '--test' || '' }}

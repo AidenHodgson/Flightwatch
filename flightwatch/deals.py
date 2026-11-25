@@ -2,14 +2,20 @@
 from statistics import median
 
 MIN_HISTORY = 15          # price samples needed before we trust "normal"
+MIN_DAYS = 3              # ...spread over at least this many different days
 REALERT_DAYS = 7          # wait this long before re-sending a similar deal
 # (runs happen every few hours, so this also stops the same deal pinging you all day)
 REALERT_BETTER_PCT = 10   # unless the new price is this much lower
 
 
-def baseline(history):
-    """Typical price for a route: the median of recent samples."""
-    if len(history) < MIN_HISTORY:
+def baseline(history, days_seen=MIN_DAYS):
+    """Typical price for a route: the median of recent samples.
+
+    Returns None until there's enough history, so nothing counts as a sale
+    in the first few days. One day of prices only says what fares cost today,
+    not whether today is unusually cheap.
+    """
+    if len(history) < MIN_HISTORY or days_seen < MIN_DAYS:
         return None
     return median(history)
 

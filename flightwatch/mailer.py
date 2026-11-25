@@ -92,3 +92,29 @@ def render(name, deals, manage_url=None):
         + manage_html
     )
     return subject, html, text
+
+
+def render_setup(name, routes, manage_url=None):
+    """The test email: confirms alerts work, lists no fares."""
+    subject = "Flightwatch is set up"
+    manage_text = f"\n\nChange your routes or pause alerts: {manage_url}" if manage_url else ""
+    text = (
+        f"Hi {name},\n\nYou're watching {routes} route{'s' if routes != 1 else ''}. "
+        "Flightwatch checks them every few hours and only emails you when a fare is on sale, "
+        "meaning well below what that route normally costs. It needs a few days of prices "
+        "to learn what normal is, so the first alerts can take a few days."
+        + manage_text
+    )
+    button = (
+        f"<p><a href='{manage_url}' style='display:inline-block;padding:10px 16px;background:#111;"
+        f"color:#fff;border-radius:8px;text-decoration:none'>Manage your routes</a></p>"
+        if manage_url else ""
+    )
+    html = (
+        f"<p>Hi {name},</p><p>You're watching {routes} route{'s' if routes != 1 else ''}. "
+        "Flightwatch checks them every few hours and only emails you when a fare is on sale, "
+        "meaning well below what that route normally costs.</p>"
+        "<p style='color:#666'>It needs a few days of prices to learn what normal is, "
+        "so the first alerts can take a few days.</p>" + button
+    )
+    return subject, html, text
