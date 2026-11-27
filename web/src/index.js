@@ -306,7 +306,7 @@ async function adminPage(env, url, base, msg) {
         <div class="muted small">${u.routes} route${u.routes == 1 ? "" : "s"}</div></div>
         <form method="post" action="${base}/link/${u.id}"><button class="ghost small">New link</button></form></div>
       ${link ? `<input readonly value="${link}" onclick="this.select()" class="small">
-        <div class="row"><a href="${link}">Open</a><a href="mailto:${esc(u.email)}?subject=${encodeURIComponent("Your Flightwatch link")}&body=${encodeURIComponent(`Here's your Flightwatch page. Pick the routes you want and you'll get an email when fares drop:\n\n${link}`)}">Email it to them</a></div>` : ""}
+        <div class="row"><a href="${link}">Open</a><a href="mailto:${esc(u.email)}?subject=${encodeURIComponent("You're on Flightwatch (free flight sale alerts)")}&body=${encodeURIComponent(inviteText(u.name, link))}">Email it to them</a></div>` : ""}
     </div>`;
   }).join("");
   const body = `
@@ -325,6 +325,26 @@ async function adminPage(env, url, base, msg) {
     <h2>People</h2>
     ${rows || `<p class="muted">Nobody yet.</p>`}`;
   return page("Flightwatch admin", body);
+}
+
+function inviteText(name, link) {
+  return `Hey ${name},
+
+I added you to Flightwatch, a free flight sale alert tool I built. It checks Google Flights every few hours for routes you pick and only emails you when a fare is actually on sale.
+
+Your private settings page (it's your login, so don't share it):
+${link}
+
+How it works: every fare is compared to Google's own typical price for that exact trip. You only get an email when a fare is below the usual range, at least 30% under typical, and saves at least $150. Each email shows the price vs normal, the airline, the cheapest dates, how long the sale runs, and a link to Google Flights.
+
+Setup:
+1. Open your link. You may already have starter routes from Atlanta to Europe and Asia.
+2. Remove routes you don't want, or add your own under "Add routes" (several airport codes at once works, like FCO, LIS, ATH).
+3. Tap a route to change cabin, trip length, how far ahead to look, or how big a drop counts.
+4. Optional: pick your airlines under Airlines.
+5. Optional: turn on the check-in email for a Sunday and Wednesday update.
+
+Alerts come from "Flightwatch", so add it to your contacts if one lands in spam. Big sales don't happen every day, so quiet is normal.`;
 }
 
 // ---------- helpers ----------
