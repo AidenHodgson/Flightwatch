@@ -112,6 +112,10 @@ Google's typical price is for the whole route (all airlines), so a sale on your 
 
 For each route: the sale price next to the usual price, percent off and dollars saved, the airline and stops, the cheapest dates, **when the sale runs** (for example "February only" or "mid-January to late-February (this winter)") and how many of the checked departure dates are on sale, plus Google's usual range for the trip. Sales also need to save at least $150, so small dips never send an email.
 
+## Check-in email
+
+People with it turned on (a toggle on their settings page) get a short email Sunday and Wednesday at 10 AM New York time: how many checks ran, any sales that went out, and the three fares that came closest to a sale. If no checks ran at all, the subject says so, so a broken setup never goes unnoticed. To send one right away: **Actions > Check-in email > Run workflow** with "Send now" ticked, or `python -m flightwatch.digest --force`.
+
 ## If email stops working
 
 Prices are always saved, and any sale that couldn't be sent waits and goes out on the next run that can send. Flightwatch also opens one GitHub issue called "Flightwatch can't send email" with the exact reason and the waiting deals. GitHub notifies you about it, and it closes itself once email works again. The issue never includes anyone's email address.

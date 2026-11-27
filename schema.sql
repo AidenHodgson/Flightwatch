@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
   basecamp INTEGER NOT NULL DEFAULT 0, -- 1 = also ping a Basecamp app (optional)
   airlines TEXT,                   -- e.g. 'DL' or 'DL,AF'; empty = any airline
   airline_mode TEXT NOT NULL DEFAULT 'prefer', -- 'prefer' (fall back if they don't fly it) or 'only'
+  digest INTEGER NOT NULL DEFAULT 0, -- 1 = check-in email Sunday and Wednesday mornings
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token);
@@ -56,3 +57,12 @@ CREATE TABLE IF NOT EXISTS alerts (
   sent_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_watch ON alerts(watch_id, sent_at);
+CREATE INDEX IF NOT EXISTS idx_prices_checked ON prices(checked_at);
+
+-- Check-in emails already sent (one per person per day)
+CREATE TABLE IF NOT EXISTS digests (
+  user_id INTEGER NOT NULL,
+  day TEXT NOT NULL,
+  sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, day)
+);

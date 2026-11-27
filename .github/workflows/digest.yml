@@ -1,0 +1,43 @@
+name: Check-in email
+
+# Sunday and Wednesday, 10 AM New York time. GitHub often skips or delays
+# scheduled runs, so it tries several times that morning (and across daylight
+# saving). The script sends once per person per day and ignores extra tries.
+on:
+  schedule:
+    - cron: "4 14 * * 0,3"
+    - cron: "4 15 * * 0,3"
+    - cron: "34 15 * * 0,3"
+    - cron: "4 16 * * 0,3"
+    - cron: "34 16 * * 0,3"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Send now, even if it isn't Sunday or Wednesday"
+        type: boolean
+        default: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Send check-in
+        env:
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID || '7fd78c7f-f1f6-4cf9-b942-0403e3873dc8' }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST || 'smtp.gmail.com' }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT || '587' }}
+          SMTP_USER: ${{ secrets.SMTP_USER || 'flightwatchalerts@gmail.com' }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL || 'Flightwatch <flightwatchalerts@gmail.com>' }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://flightwatch.aidentjhodgson.workers.dev' }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: python -m flightwatch.digest ${{ inputs.force && '--force' || '' }}

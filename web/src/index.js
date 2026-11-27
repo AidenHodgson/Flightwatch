@@ -131,6 +131,10 @@ async function userPage(env, user, base, msg) {
         <div><b>Alerts are ${user.active ? "on" : "paused"}</b><div class="muted small">${esc(user.email)}</div></div>
         <form method="post" action="${base}/alerts"><button class="${user.active ? "ghost" : ""}">${user.active ? "Pause all" : "Turn back on"}</button></form>
       </div>
+      <div class="row between" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+        <div><b>Check-in email ${user.digest ? "on" : "off"}</b><div class="muted small">Sunday and Wednesday at 10 AM: proof it's running, plus the closest fares</div></div>
+        <form method="post" action="${base}/digest"><button class="ghost small">${user.digest ? "Turn off" : "Turn on"}</button></form>
+      </div>
     </section>
 
     <h2>Airlines</h2>
@@ -227,6 +231,10 @@ async function userAction(env, user, action, form) {
   if (action === "alerts") {
     await env.DB.prepare("UPDATE users SET active = ? WHERE id = ?").bind(user.active ? 0 : 1, user.id).run();
     return user.active ? "Alerts paused" : "Alerts are back on";
+  }
+  if (action === "digest") {
+    await env.DB.prepare("UPDATE users SET digest = ? WHERE id = ?").bind(user.digest ? 0 : 1, user.id).run();
+    return user.digest ? "Check-in emails off" : "Check-in emails on";
   }
   if (action === "airlines") {
     const picked = form.getAll("airline").map(String).filter((c) => AIRLINE_CODES.has(c));
